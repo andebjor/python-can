@@ -502,6 +502,16 @@ class KvaserBus(BusABC):
         log.debug("Going bus on TX handle")
         canBusOn(self._write_handle)
 
+        self._timestamp_offset = None
+        self.sync_to_system_clock()
+
+        self._is_filtered = False
+        super().__init__(channel=channel, can_filters=can_filters, **kwargs)
+
+    def sync_to_system_clock(self):
+        """Sync dongle clock to system time for accurate time stamps."""
+        previous_offset = self._timestamp_offset
+
         timer = ctypes.c_uint(0)
         try:
             if time.get_clock_info("time").resolution > 1e-5:
@@ -519,8 +529,10 @@ class KvaserBus(BusABC):
             log.info(str(exc))
             self._timestamp_offset = time.time() - (timer.value * TIMESTAMP_FACTOR)
 
-        self._is_filtered = False
-        super().__init__(channel=channel, can_filters=can_filters, **kwargs)
+        if previous_offset is not None:
+            log.info(
+                f"Time sync adjusted by {(self._timestamp_offset - previous_offset) * 1000:+.3f} milliseconds"
+            )
 
     def _apply_filters(self, filters):
         if filters and len(filters) == 1:
